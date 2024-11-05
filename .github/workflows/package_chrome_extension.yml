@@ -24,8 +24,13 @@ jobs:
       - name: Build and package Chrome extension
         run: yarn build:prod-chrome
 
+      - name: Find the generated zip file
+        id: find_zip
+        run: echo "ZIP_PATH=$(find build-zip/* -type f -name '*.zip')" >> $GITHUB_ENV
+
       - name: Upload Chrome extension ZIP
         uses: actions/upload-artifact@v4
         with:
           name: chrome-extension
-          path: dist/chrome_extension.zip
+          path: ${{ env.ZIP_PATH }}  # Uploads only the generated zip file
+          
