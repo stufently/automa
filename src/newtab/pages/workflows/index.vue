@@ -245,6 +245,9 @@
                 {{ t('workflow.type.host') }}
               </option>
             </ui-select>
+            <ui-button @click="manualSync" variant="accent" class="ml-4">
+              {{ t('common.syncNow') }}
+            </ui-button>
           </div>
         </div>
         <ui-tab-panels v-model="state.activeTab" class="mt-6 flex-1">
@@ -389,7 +392,6 @@ import WorkflowsHosted from '@/components/newtab/workflows/WorkflowsHosted.vue';
 import WorkflowsFolder from '@/components/newtab/workflows/WorkflowsFolder.vue';
 import WorkflowsUserTeam from '@/components/newtab/workflows/WorkflowsUserTeam.vue';
 import SharedPermissionsModal from '@/components/newtab/shared/SharedPermissionsModal.vue';
-
 useGroupTooltip();
 
 const { t } = useI18n();
@@ -408,6 +410,15 @@ const validTeamId = userStore.user?.teams?.some(
   ({ id }) => id === teamId || id === +teamId
 );
 
+const manualSync = async () => {
+  try {
+    await workflowStore.synchronizeWorkflows(); // Вызов метода синхронизации
+    toast.success('Рабочие процессы успешно синхронизированы'); // Сообщение об успехе
+  } catch (error) {
+    toast.error('Ошибка при синхронизации рабочих процессов'); // Сообщение об ошибке
+    console.error(error);
+  }
+};
 const state = shallowReactive({
   teams: [],
   query: '',
