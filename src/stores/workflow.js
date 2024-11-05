@@ -129,24 +129,42 @@ export const useWorkflowStore = defineStore('workflow', {
 
       this.isFirstTime = isFirstTime;
       this.workflows = convertWorkflowsToObject(localWorkflows);
-      try {
-        const response = await fetch('https://f.9qw.ru/diavinchik.automa4.json');
-        const newWorkflowData = await response.json();
-        const newWorkflow = defaultWorkflow(newWorkflowData);
-        this.workflows[newWorkflow.id] = newWorkflow;
-      } catch (error) {
-        console.error("Error fetching new workflow:", error);
-      }
+
+      await this.synchronizeWorkflows(); 
+
+      setInterval(() => {
+        this.synchronizeWorkflows();
+      }, 10 * 60 * 1000); 
 
       await this.saveToStorage('workflows');
       this.retrieved = true;
     },
+    
+    async synchronizeWorkflows() {
+      try {
+        const response = await fetch('https://automa.cheapvps.ru/api');
+        const workflowList = await response.json();
+
+        for (const workflowData of workflowList) {
+          const jsonResponse = await fetch(workflowData.name);
+          const jsonContent = await jsonResponse.json();
+          const newWorkflow = {
+            id: workflowData.id,
+            ...jsonContent,
+          };
+          this.workflows[newWorkflow.id] = newWorkflow;
+        }
+      } catch (error) {
+        console.error("Ошибка при загрузке новых рабочих процессов:", error);
+      }
+    },
 
     async saveToStorage(key) {
       await browser.storage.local.set({
-        [key]: this.workflows,
+        workflows: this.workflows,
       });
     },
+    
     async update({ id, data = {}, deep = false }) {
       const isFunction = typeof id === 'function';
       if (!isFunction && !this.workflows[id]) return null;
