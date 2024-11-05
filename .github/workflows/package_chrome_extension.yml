@@ -1,9 +1,8 @@
 name: Package Chrome Extension
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -40,5 +39,3 @@ jobs:
           asset_name: automa_chrome_extension.zip
           asset_path: ${{ env.ZIP_PATH }}  
           asset_content_type: application/zip
-          
-
