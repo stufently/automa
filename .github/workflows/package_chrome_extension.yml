@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Create getPassKey.js
+        run: echo "export default function() { return 'Wh@tAr3Y0uDoing?'; }" > ./src/utils/getPassKey.js
+
       - name: Build and package Chrome extension
         run: yarn build:prod-chrome
 
@@ -29,8 +32,12 @@ jobs:
         run: echo "ZIP_PATH=$(find build-zip/* -type f -name '*.zip')" >> $GITHUB_ENV
 
       - name: Upload Chrome extension ZIP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: chrome-extension
-          path: ${{ env.ZIP_PATH }}  # Uploads only the generated zip file
-          
+          upload_url: ${{ github.event.release.upload_url }}
+          name: automa_chrome_extension.zip
+          asset_path: ${{ env.ZIP_PATH }}  
+          asset_content_type: application/zip
+
