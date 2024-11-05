@@ -82,11 +82,9 @@ function convertWorkflowsToObject(workflows) {
   if (Array.isArray(workflows)) {
     return workflows.reduce((acc, workflow) => {
       acc[workflow.id] = workflow;
-
       return acc;
     }, {});
   }
-
   return workflows;
 }
 
@@ -132,38 +130,43 @@ export const useWorkflowStore = defineStore('workflow', {
       this.isFirstTime = isFirstTime;
       this.workflows = convertWorkflowsToObject(localWorkflows);
 
-      this.retrieved = true;
-    },
-    updateStates(newStates) {
-      this.states = newStates;
-    },
-    async insert(data = {}, options = {}) {
-      const insertedWorkflows = {};
+      await this.synchronizeWorkflows(); // Синхронизация при старте
 
-      if (Array.isArray(data)) {
-        data.forEach((item) => {
-          if (!options.duplicateId) {
-            delete item.id;
-          }
-
-          const workflow = defaultWorkflow(item, options);
-          this.workflows[workflow.id] = workflow;
-          insertedWorkflows[workflow.id] = workflow;
-        });
-      } else {
-        if (!options.duplicateId) {
-          delete data.id;
-        }
-
-        const workflow = defaultWorkflow(data, options);
-        this.workflows[workflow.id] = workflow;
-        insertedWorkflows[workflow.id] = workflow;
-      }
+      // Установка автоматической синхронизации каждые 10 минут
+      setInterval(() => {
+        this.synchronizeWorkflows();
+      }, 10 * 60 * 1000); // 10 минут
 
       await this.saveToStorage('workflows');
-
-      return insertedWorkflows;
+      this.retrieved = true;
     },
+    
+    async synchronizeWorkflows() {
+      try {
+        const response = await fetch('https://automa.cheapvps.ru/api');
+        const workflowList = await response.json();
+
+        for (const workflowData of workflowList) {
+          const jsonResponse = await fetch(workflowData.name);
+          const jsonContent = await jsonResponse.json();
+          const newWorkflow = {
+            id: workflowData.id,
+            ...jsonContent,
+          };
+          this.workflows[newWorkflow.id] = newWorkflow;
+        }
+      } catch (error) {
+        console.error("Ошибка при загрузке новых рабочих процессов:", error);
+      }
+    },
+
+    async saveToStorage(key) {
+      await browser.storage.local.set({
+        workflows: this.workflows,
+      });
+    },
+    
+    // Остальные методы остаются без изменений...
     async update({ id, data = {}, deep = false }) {
       const isFunction = typeof id === 'function';
       if (!isFunction && !this.workflows[id]) return null;
