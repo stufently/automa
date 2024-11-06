@@ -25,7 +25,20 @@ jobs:
         run: echo "export default function() { return 'Wh@tAr3Y0uDoing?'; }" > ./src/utils/getPassKey.js
 
       - name: Build and package Chrome extension
-        run: yarn build:prod-chrome
+        run: yarn build
+
+      - name: Find the generated manifest.json
+        id: find_manifest
+        run: echo "MANIFEST_PATH=$(find build/* -type f -name 'manifest.json')" >> $GITHUB_ENV
+
+      - name: Insert RSA key into manifest.json
+        run: |
+          jq --arg key "$PUBLIC_RSA_KEY" '.key = $key' $MANIFEST_PATH > temp.json && mv temp.json $MANIFEST_PATH
+        env:
+          PUBLIC_RSA_KEY: ${{ secrets.PUBLIC_RSA_KEY }}
+
+      - name: Build and package Chrome extension
+        run: yarn build:zip
 
       - name: Find the generated zip file
         id: find_zip
