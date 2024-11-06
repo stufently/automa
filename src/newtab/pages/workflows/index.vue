@@ -469,11 +469,11 @@ function updateActiveTab(data = {}) {
 }
 function addWorkflow() {
   workflowStore
-    .insert({
+    .insertOrUpdate([{  // Change to insertOrUpdate and wrap data in array
       name: addWorkflowModal.name,
       folderId: state.activeFolder,
       description: addWorkflowModal.description,
-    })
+    }])
     .then((workflows) => {
       const workflowId = Object.keys(workflows)[0];
       router.push(`/workflows/${workflowId}`);
