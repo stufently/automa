@@ -566,14 +566,16 @@ function setActiveLog(item) {
 }
 function getBlockPath(blockId) {
   const { workflowId, teamId } = props.currentLog;
-  let path = `/workflows/${workflowId}`;
 
-  if (workflowId.startsWith('team') && teamId) {
+  let path = workflowId && typeof workflowId === 'string' ? `/workflows/${workflowId}` : '';
+
+  if (path && workflowId.startsWith('team') && teamId) {
     path = `/teams/${teamId}/workflows/${workflowId}`;
   }
 
   return `${path}?blockId=${blockId}`;
 }
+
 function jumpToError() {
   pagination.currentPage = Math.ceil(errorBlock.value.id / pagination.perPage);
 
