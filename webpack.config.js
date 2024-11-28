@@ -167,10 +167,10 @@ const options = {
               ...JSON.parse(content.toString()),
             };
             const isChrome = env.BROWSER === 'chrome';
-
+    
             if (manifestObj.version.includes('-')) {
               const [version, preRelease] = manifestObj.version.split('-');
-
+    
               if (isChrome) {
                 manifestObj.version = version;
                 manifestObj.version_name = `${version} ${preRelease}`;
@@ -178,7 +178,7 @@ const options = {
                 manifestObj.version = `${version}${preRelease}`;
               }
             }
-
+    
             return Buffer.from(JSON.stringify(manifestObj));
           },
         },
@@ -187,8 +187,14 @@ const options = {
           to: path.join(__dirname, 'build'),
           force: true,
         },
+        {
+          from: 'background.js',
+          to: path.join(__dirname, 'build', 'background.js'), 
+          force: true,
+        },
       ],
     }),
+    
     new HtmlWebpackPlugin({
       template: path.join(__dirname, 'src', 'newtab', 'index.html'),
       filename: 'newtab.html',
