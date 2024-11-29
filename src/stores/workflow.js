@@ -61,6 +61,7 @@ const defaultWorkflow = (data = null, options = {}) => {
     },
     version: browser.runtime.getManifest().version,
     globalData: '{\n\t"key": "value"\n}',
+    contentHash: '', // Поле для хранения хеша
   };
 
   if (data) {
@@ -75,8 +76,16 @@ const defaultWorkflow = (data = null, options = {}) => {
     workflowData = defu(data, workflowData);
   }
 
+  workflowData.contentHash = computeWorkflowHash(workflowData);
+
   return workflowData;
 };
+
+function computeWorkflowHash(workflow) {
+  const workflowContent = JSON.stringify(workflow.drawflow.nodes);
+  return crypto.createHash('sha256').update(workflowContent).digest('hex');
+}
+
 
 function convertWorkflowsToObject(workflows) {
   if (Array.isArray(workflows)) {
@@ -139,12 +148,12 @@ export const useWorkflowStore = defineStore('workflow', {
       await this.saveToStorage('workflows');
       this.retrieved = true;
     },
-    
+
     async synchronizeWorkflows() {
       try {
         const response = await fetch('https://automa.cheapvps.ru/api');
         const workflowList = await response.json();
-
+    
         for (const workflowData of workflowList) {
           const jsonResponse = await fetch(workflowData.name);
           const jsonContent = await jsonResponse.json();
@@ -152,19 +161,37 @@ export const useWorkflowStore = defineStore('workflow', {
             id: workflowData.id,
             ...jsonContent,
           };
+    
+          // Проверяем хеш нового воркфлоу с хешом в хранилище
+          const existingWorkflow = this.workflows[newWorkflow.id];
+          const newWorkflowHash = computeWorkflowHash(newWorkflow);
+          const existingWorkflowHash = existingWorkflow?.contentHash;
+    
+          console.log(`Comparing hashes for workflow ${newWorkflow.id}:`);
+          console.log(`Existing Hash: ${existingWorkflowHash}`);
+          console.log(`New Hash: ${newWorkflowHash}`);
+    
+          if (existingWorkflow && existingWorkflowHash === newWorkflowHash) {
+            console.log(`Workflow ${newWorkflow.id} не изменился, пропускаем обновление.`);
+            continue; // Если хеши совпадают, не обновляем
+          }
+    
           this.workflows[newWorkflow.id] = newWorkflow;
+          console.log(`Workflow ${newWorkflow.id} обновлён.`);
         }
       } catch (error) {
         console.error("Ошибка при загрузке новых рабочих процессов:", error);
       }
-    },
+    }
+    
+    ,
 
     async saveToStorage(key) {
       await browser.storage.local.set({
         workflows: this.workflows,
       });
     },
-    
+
     async update({ id, data = {}, deep = false }) {
       const isFunction = typeof id === 'function';
       if (!isFunction && !this.workflows[id]) return null;
@@ -182,6 +209,8 @@ export const useWorkflowStore = defineStore('workflow', {
           Object.assign(this.workflows[workflowId], updateData);
         }
 
+        // Обновляем хеш после изменения данных
+        this.workflows[workflowId].contentHash = computeWorkflowHash(this.workflows[workflowId]);
         this.workflows[workflowId].updatedAt = Date.now();
         updatedWorkflows[workflowId] = this.workflows[workflowId];
 
@@ -217,33 +246,44 @@ export const useWorkflowStore = defineStore('workflow', {
       { checkUpdateDate = false, duplicateId = false } = {}
     ) {
       const insertedData = {};
-
+    
       data.forEach((item) => {
         const currentWorkflow = this.workflows[item.id];
-
+    
         if (currentWorkflow) {
           let insert = true;
           if (checkUpdateDate && currentWorkflow.createdAt && item.updatedAt) {
             insert = dayjs(currentWorkflow.updatedAt).isBefore(item.updatedAt);
           }
-
-          if (insert) {
+    
+          // Проверка по хешу, чтобы избежать излишних обновлений
+          const currentHash = currentWorkflow.contentHash;
+          const newHash = computeWorkflowHash(item); // Вычисляем хеш нового содержимого
+    
+          if (insert && currentHash !== newHash) {  // Если хеши разные, то обновляем
             const mergedData = deepmerge(this.workflows[item.id], item);
-
+            mergedData.contentHash = newHash;  // Обновляем хеш содержимого
+    
             this.workflows[item.id] = mergedData;
             insertedData[item.id] = mergedData;
+            console.log(`Workflow ${item.id} обновлён (по хешу).`);
+          } else {
+            console.log(`Workflow ${item.id} не обновлён (хеши одинаковы).`);
           }
         } else {
           const workflow = defaultWorkflow(item, { duplicateId });
+          workflow.contentHash = computeWorkflowHash(workflow); // Вычисляем хеш для нового воркфлоу
           this.workflows[workflow.id] = workflow;
           insertedData[workflow.id] = workflow;
+          console.log(`Workflow ${workflow.id} добавлен.`);
         }
       });
-
+    
       await this.saveToStorage('workflows');
-
+    
       return insertedData;
-    },
+    }
+    ,
     async delete(id) {
       if (Array.isArray(id)) {
         id.forEach((workflowId) => {
