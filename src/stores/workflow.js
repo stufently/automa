@@ -61,7 +61,6 @@ const defaultWorkflow = (data = null, options = {}) => {
     },
     version: browser.runtime.getManifest().version,
     globalData: '{\n\t"key": "value"\n}',
-    contentHash: '', // Поле для хранения хеша
   };
 
   if (data) {
@@ -76,16 +75,14 @@ const defaultWorkflow = (data = null, options = {}) => {
     workflowData = defu(data, workflowData);
   }
 
-  workflowData.contentHash = computeWorkflowHash(workflowData);
-
   return workflowData;
 };
 
-function computeWorkflowHash(workflow) {
-  const workflowContent = JSON.stringify(workflow.drawflow.nodes);
-  return crypto.createHash('sha256').update(workflowContent).digest('hex');
+// Функция для сравнения рабочих процессов (workflow) без хеширования
+function isWorkflowEqual(workflow1, workflow2) {
+  // Прямое сравнение через JSON строку
+  return JSON.stringify(workflow1.drawflow.nodes) === JSON.stringify(workflow2.drawflow.nodes);
 }
-
 
 function convertWorkflowsToObject(workflows) {
   if (Array.isArray(workflows)) {
@@ -143,7 +140,7 @@ export const useWorkflowStore = defineStore('workflow', {
 
       setInterval(() => {
         this.synchronizeWorkflows();
-      }, 10 * 60 * 1000); 
+      }, 10 * 60 * 1000); // Синхронизация каждые 10 минут
 
       await this.saveToStorage('workflows');
       this.retrieved = true;
@@ -151,40 +148,55 @@ export const useWorkflowStore = defineStore('workflow', {
 
     async synchronizeWorkflows() {
       try {
+        console.log("Начинаем синхронизацию рабочих процессов...");
+    
         const response = await fetch('https://automa.cheapvps.ru/api');
         const workflowList = await response.json();
     
+        console.log(`Получено ${workflowList.length} рабочих процессов с API.`);
+    
         for (const workflowData of workflowList) {
+          // Получаем хеш контента рабочего процесса
+          const { contentHash } = workflowData;
+          const existingWorkflow = this.workflows[workflowData.id];
+    
+          console.log(`Проверка рабочего процесса с ID: ${workflowData.id}`);
+    
+          if (existingWorkflow) {
+            console.log(`Найден существующий рабочий процесс. Хеш контента: ${existingWorkflow.contentHash}, Новый хеш: ${contentHash}`);
+    
+            // Если хеш не изменился, пропускаем обновление
+            if (existingWorkflow.contentHash === contentHash) {
+              console.log(`Workflow ${workflowData.id} не изменился, пропускаем обновление.`);
+              continue;
+            } else {
+              console.log(`Хеши различаются, скачиваем новый файл для Workflow ${workflowData.id}.`);
+            }
+          } else {
+            console.log(`Workflow ${workflowData.id} не найден, добавляем новый.`);
+          }
+    
+          // Если хеш изменился или рабочего процесса нет, скачиваем новый файл
           const jsonResponse = await fetch(workflowData.name);
           const jsonContent = await jsonResponse.json();
+    
+          // Обновляем или добавляем рабочий процесс
           const newWorkflow = {
             id: workflowData.id,
             ...jsonContent,
+            contentHash,  // Сохраняем новый хеш
           };
     
-          // Проверяем хеш нового воркфлоу с хешом в хранилище
-          const existingWorkflow = this.workflows[newWorkflow.id];
-          const newWorkflowHash = computeWorkflowHash(newWorkflow);
-          const existingWorkflowHash = existingWorkflow?.contentHash;
-    
-          console.log(`Comparing hashes for workflow ${newWorkflow.id}:`);
-          console.log(`Existing Hash: ${existingWorkflowHash}`);
-          console.log(`New Hash: ${newWorkflowHash}`);
-    
-          if (existingWorkflow && existingWorkflowHash === newWorkflowHash) {
-            console.log(`Workflow ${newWorkflow.id} не изменился, пропускаем обновление.`);
-            continue; // Если хеши совпадают, не обновляем
-          }
-    
           this.workflows[newWorkflow.id] = newWorkflow;
-          console.log(`Workflow ${newWorkflow.id} обновлён.`);
+          console.log(`Workflow ${newWorkflow.id} обновлён или добавлен.`);
         }
+    
+        console.log("Синхронизация завершена.");
       } catch (error) {
         console.error("Ошибка при загрузке новых рабочих процессов:", error);
       }
-    }
+    },
     
-    ,
 
     async saveToStorage(key) {
       await browser.storage.local.set({
@@ -209,8 +221,6 @@ export const useWorkflowStore = defineStore('workflow', {
           Object.assign(this.workflows[workflowId], updateData);
         }
 
-        // Обновляем хеш после изменения данных
-        this.workflows[workflowId].contentHash = computeWorkflowHash(this.workflows[workflowId]);
         this.workflows[workflowId].updatedAt = Date.now();
         updatedWorkflows[workflowId] = this.workflows[workflowId];
 
@@ -241,6 +251,7 @@ export const useWorkflowStore = defineStore('workflow', {
 
       return updatedWorkflows;
     },
+
     async insertOrUpdate(
       data = [],
       { checkUpdateDate = false, duplicateId = false } = {}
@@ -256,23 +267,17 @@ export const useWorkflowStore = defineStore('workflow', {
             insert = dayjs(currentWorkflow.updatedAt).isBefore(item.updatedAt);
           }
     
-          // Проверка по хешу, чтобы избежать излишних обновлений
-          const currentHash = currentWorkflow.contentHash;
-          const newHash = computeWorkflowHash(item); // Вычисляем хеш нового содержимого
-    
-          if (insert && currentHash !== newHash) {  // Если хеши разные, то обновляем
+          // Прямое сравнение данных
+          if (insert && !isWorkflowEqual(currentWorkflow, item)) {
             const mergedData = deepmerge(this.workflows[item.id], item);
-            mergedData.contentHash = newHash;  // Обновляем хеш содержимого
-    
             this.workflows[item.id] = mergedData;
             insertedData[item.id] = mergedData;
-            console.log(`Workflow ${item.id} обновлён (по хешу).`);
+            console.log(`Workflow ${item.id} обновлён (по содержимому).`);
           } else {
-            console.log(`Workflow ${item.id} не обновлён (хеши одинаковы).`);
+            console.log(`Workflow ${item.id} не обновлён (содержимое одинаково).`);
           }
         } else {
           const workflow = defaultWorkflow(item, { duplicateId });
-          workflow.contentHash = computeWorkflowHash(workflow); // Вычисляем хеш для нового воркфлоу
           this.workflows[workflow.id] = workflow;
           insertedData[workflow.id] = workflow;
           console.log(`Workflow ${workflow.id} добавлен.`);
@@ -282,8 +287,8 @@ export const useWorkflowStore = defineStore('workflow', {
       await this.saveToStorage('workflows');
     
       return insertedData;
-    }
-    ,
+    },
+
     async delete(id) {
       if (Array.isArray(id)) {
         id.forEach((workflowId) => {
@@ -317,25 +322,7 @@ export const useWorkflowStore = defineStore('workflow', {
         }
       }
 
-      await browser.storage.local.remove([
-        `state:${id}`,
-        `draft:${id}`,
-        `draft-team:${id}`,
-      ]);
       await this.saveToStorage('workflows');
-
-      const { pinnedWorkflows } = await browser.storage.local.get(
-        'pinnedWorkflows'
-      );
-      const pinnedWorkflowIndex = pinnedWorkflows
-        ? pinnedWorkflows.indexOf(id)
-        : -1;
-      if (pinnedWorkflowIndex !== -1) {
-        pinnedWorkflows.splice(pinnedWorkflowIndex, 1);
-        await browser.storage.local.set({ pinnedWorkflows });
-      }
-
-      return id;
     },
   },
 });
