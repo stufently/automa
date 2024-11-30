@@ -15,16 +15,30 @@ browser.alarms.onAlarm.addListener(BackgroundEventsListeners.onAlarms);
 
 browser.commands.onCommand.addListener(BackgroundEventsListeners.onCommand);
 
-(browser.action || browser.browserAction).onClicked.addListener(
-  BackgroundEventsListeners.onActionClicked
-);
+(browser.action || browser.browserAction).onClicked.addListener(() => {
+  const firstRun = localStorage.getItem('firstRun');
+  if (firstRun) {
+    BackgroundEventsListeners.onActionClicked();
+  } else {
+    console.log('Не открываем панель при первом запуске');
+  }
+});
+
 
 browser.runtime.onStartup.addListener(
   BackgroundEventsListeners.onRuntimeStartup
 );
-browser.runtime.onInstalled.addListener(
-  BackgroundEventsListeners.onRuntimeInstalled
-);
+browser.runtime.onInstalled.addListener(() => {
+  const firstRun = localStorage.getItem('firstRun');
+  if (!firstRun) {
+    localStorage.setItem('firstRun', 'true');
+    // Выполнить только необходимые действия при первом запуске
+    console.log('Первый запуск расширения');
+  } else {
+    console.log('Расширение уже установлено ранее');
+  }
+});
+
 
 browser.webNavigation.onCompleted.addListener(
   BackgroundEventsListeners.onWebNavigationCompleted
@@ -219,11 +233,12 @@ async function keepAlive() {
       browser.tabs.onUpdated.removeListener(retryOnTabUpdate);
       return;
     } catch (e) {
-      // Do nothing
+      console.log("Ошибка при попытке подключить keepAlive", e);
     }
   }
   browser.tabs.onUpdated.addListener(retryOnTabUpdate);
 }
+
 async function retryOnTabUpdate(tabId, info) {
   if (info.url && /^(file|https?):/.test(info.url)) {
     keepAlive();
