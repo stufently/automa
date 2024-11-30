@@ -187,11 +187,6 @@ const options = {
           to: path.join(__dirname, 'build'),
           force: true,
         },
-        {
-          from: 'background.js',
-          to: path.join(__dirname, 'build', 'background.js'), 
-          force: true,
-        },
       ],
     }),
     
