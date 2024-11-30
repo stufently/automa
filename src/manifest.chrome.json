@@ -6,7 +6,7 @@
     "default_icon": "icon-128.png"
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["background.bundle.js"]
   },
   "icons": {
     "128": "icon-128.png"
